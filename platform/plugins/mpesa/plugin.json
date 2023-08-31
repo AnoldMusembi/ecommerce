@@ -1,0 +1,11 @@
+{
+    "id": "botble/mpesa",
+    "name": "Mpesa Payment Gateway",
+    "namespace": "Botble\\Mpesa\\",
+    "provider": "Botble\\Mpesa\\Providers\\MpesaServiceProvider",
+    "author": "Majhub Solutions",
+    "url": "https://majhubsolutions.com",
+    "version": "1.0.0",
+    "description": "Mpesa payment gateway integration",
+    "require": ["botble/payment"]
+}
