@@ -1,4 +1,4 @@
-<?php
+<?php 
 
 return [
     'name' => 'core/acl::auth.settings.email.title',
