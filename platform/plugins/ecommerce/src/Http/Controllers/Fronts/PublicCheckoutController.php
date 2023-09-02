@@ -749,30 +749,28 @@ class PublicCheckoutController
     public function postCheckout(
         string $token,
         CheckoutRequest $request,
-        BaseHttpResponse $response,
-        HandleShippingFeeService $shippingFeeService,
-        HandleApplyCouponService $applyCouponService,
-        HandleRemoveCouponService $removeCouponService,
-        HandleApplyPromotionsService $handleApplyPromotionsService
+        BaseHttpResponse $response
     ) {
         // Extract data from the request
         $shippingOptionId = $request->input('shipping_option[3]');
         $shippingMethod = $request->input('shipping_method[3]');
         $couponCode = $request->input('coupon_code');
-        $addressId = $request->input('address')['address_id'];
+        $addressId = $request->input('address[address_id]');
         $customerName = $request->input('address')['name'];
-        $customerEmail = $request->input('address')['email'];
+        $customerEmail = $request->input('address[email]');
         $customerPhone = $request->input('address')['phone'];
-        $customerCountry = $request->input('address')['country'];
-        $customerState = $request->input('address')['state'];
-        $customerCity = $request->input('address')['city'];
-        $customerAddress = $request->input('address')['address'];
+        $customerCountry = $request->input('address[country]');
+        $customerState = $request->input('address[state]');
+        $customerCity = $request->input('address[city]');
+        $customerAddress = $request->input('address[address]');
         $orderAmount = $request->input('amount');
         $currency = $request->input('currency');
         $customerId = $request->input('customer_id');
         $customerType = $request->input('customer_type');
         $paymentMethod = $request->input('payment_method');
         $description = $request->input('description');
+
+        // dd($customerName);
 
         // STKPUSH
         date_default_timezone_set('Africa/Nairobi');
@@ -782,9 +780,10 @@ class PublicCheckoutController
         $consumerSecret = get_payment_setting('app_consumer_secret', "M-pesa"); // Fill with your app Secret
         # define the variales
         # provide the following details, this part is found on your test credentials on the developer account
-        $Amount = intval($orderAmount);
+        $Amount = intval($orderAmount * 146.50);
         $BusinessShortCode = get_payment_setting('business_shortcode', "M-pesa"); //sandbox
         $Passkey = get_payment_setting('online_pass_key', "M-pesa");
+
         //generate the access token
         $response = Http::withBasicAuth($consumerKey, $consumerSecret)->get('https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials');
 
@@ -794,7 +793,7 @@ class PublicCheckoutController
         $curl = curl_init();
         curl_setopt($curl, CURLOPT_URL, 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest');
         curl_setopt($curl, CURLOPT_HTTPHEADER, array('Content-Type:application/json','Authorization:Bearer '.$AccessToken->access_token)); //setting custom header
-
+        $tokenString = '12345678';
         $curl_post_data = array(
           //Fill in the request parameters with valid values
           'BusinessShortCode' => $BusinessShortCode,
@@ -805,9 +804,9 @@ class PublicCheckoutController
           'PartyA' => $customerPhone, // replace this with your phone number
           'PartyB' => $BusinessShortCode,
           'PhoneNumber' => $customerPhone, // replace this with your phone number
-          'CallBackURL' => 'https://yourdomain.com/api/v1/stk/push/callback/url',
-          'AccountReference' => 'Test',
-          'TransactionDesc' => 'Test'
+          'CallBackURL' => 'https://app.askaritechnologies.com/api/shop/callback'. '?token=' . $tokenString,
+          'AccountReference' => $customerName,
+          'TransactionDesc' => 'Testing stk push on sandbox'
         );
 
         $data_string = json_encode($curl_post_data);
@@ -818,12 +817,35 @@ class PublicCheckoutController
 
         $curl_response = curl_exec($curl);
 
+        $transactionStatusCollection = StkPush::where('Token', $tokenString)->get();
+
+        foreach ($transactionStatusCollection as $transactionStatus) {
+            $resultCode = $transactionStatus->ResultCode;
+            $resultDesc = $transactionStatus->ResultDesc;
+
+            //if the transaction is successful
+            if($resultCode == 0) {
+                echo "Transaction Successful";
+            } else {
+                echo "Transaction Failed";
+            }
+        }
+
+
     }
 
     public function getStkPushResult(Request $request)
     {
 
         $content = json_decode($request->getContent());
+        // Retrieve the token from the request URL
+        $url = $request->fullUrl();
+        $parsedUrl = parse_url($url);
+        parse_str($parsedUrl['query'], $query);
+        $token = isset($query['token']) ? $query['token'] : null;
+
+
+
 
         if($content->Body->stkCallback->ResultCode == 0) {
             //save to transaction table
@@ -836,9 +858,10 @@ class PublicCheckoutController
             $stk_push->MpesaReceiptNumber = $content->Body->stkCallback->CallbackMetadata->Item[1]->Value;
             $stk_push->TransactionDate = $content->Body->stkCallback->CallbackMetadata->Item[2]->Value;
             $stk_push->PhoneNumber = $content->Body->stkCallback->CallbackMetadata->Item[3]->Value;
+            $stk_push->Token = $token;
+
             $stk_push->save();
 
-            return  $content->Body->stkCallback->ResultCode;
 
         } else {
             $stk_push = new StkPush();
@@ -846,10 +869,9 @@ class PublicCheckoutController
             $stk_push->CheckoutRequestID = $content->Body->stkCallback->CheckoutRequestID;
             $stk_push->ResultCode = $content->Body->stkCallback->ResultCode;
             $stk_push->ResultDesc = $content->Body->stkCallback->ResultDesc;
+            $stk_push->Token = $token;
 
             $stk_push->save();
-            return  $content->Body->stkCallback->ResultCode;
-
 
         }
 
