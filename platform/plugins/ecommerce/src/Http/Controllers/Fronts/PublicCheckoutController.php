@@ -2,6 +2,7 @@
 
 namespace Botble\Ecommerce\Http\Controllers\Fronts;
 
+use Carbon\Carbon;
 use App\Models\StkPush;
 use Illuminate\Support\Arr;
 use Illuminate\Http\Request;
@@ -513,264 +514,413 @@ class PublicCheckoutController
         return $response->setData($sessionData);
     }
 
-    // public function postCheckout(
-    //     string $token,
-    //     CheckoutRequest $request,
-    //     BaseHttpResponse $response,
-    //     HandleShippingFeeService $shippingFeeService,
-    //     HandleApplyCouponService $applyCouponService,
-    //     HandleRemoveCouponService $removeCouponService,
-    //     HandleApplyPromotionsService $handleApplyPromotionsService
-    // ) {
-    //     if (! EcommerceHelper::isCartEnabled()) {
-    //         abort(404);
-    //     }
-
-    //     if (! EcommerceHelper::isEnabledGuestCheckout() && ! auth('customer')->check()) {
-    //         return $response->setNextUrl(route('customer.login'));
-    //     }
-
-    //     if (! Cart::instance('cart')->count()) {
-    //         return $response
-    //             ->setError()
-    //             ->setMessage(__('No products in cart'));
-    //     }
-
-    //     $products = Cart::instance('cart')->products();
-
-    //     if (EcommerceHelper::isEnabledSupportDigitalProducts() && ! EcommerceHelper::canCheckoutForDigitalProducts($products)) {
-    //         return $response
-    //             ->setError()
-    //             ->setNextUrl(route('customer.login'))
-    //             ->setMessage(__('Your shopping cart has digital product(s), so you need to sign in to continue!'));
-    //     }
-
-    //     if (EcommerceHelper::getMinimumOrderAmount() > Cart::instance('cart')->rawSubTotal()) {
-    //         return $response
-    //             ->setError()
-    //             ->setMessage(__('Minimum order amount is :amount, you need to buy more :more to place an order!', [
-    //                 'amount' => format_price(EcommerceHelper::getMinimumOrderAmount()),
-    //                 'more' => format_price(EcommerceHelper::getMinimumOrderAmount() - Cart::instance('cart')
-    //                         ->rawSubTotal()),
-    //             ]));
-    //     }
-
-    //     $sessionData = OrderHelper::getOrderSessionData($token);
-
-    //     $sessionData = $this->processOrderData($token, $sessionData, $request, true);
-
-    //     foreach ($products as $product) {
-    //         if ($product->isOutOfStock()) {
-    //             return $response
-    //                 ->setError()
-    //                 ->setMessage(__('Product :product is out of stock!', ['product' => $product->original_product->name]));
-    //         }
-    //     }
-
-    //     $paymentMethod = $request->input('payment_method', session('selected_payment_method'));
-    //     if ($paymentMethod) {
-    //         session()->put('selected_payment_method', $paymentMethod);
-    //     }
-
-    //     if (is_plugin_active('marketplace')) {
-    //         return apply_filters(
-    //             HANDLE_PROCESS_POST_CHECKOUT_ORDER_DATA_ECOMMERCE,
-    //             $products,
-    //             $request,
-    //             $token,
-    //             $sessionData,
-    //             $response
-    //         );
-    //     }
-
-    //     $isAvailableShipping = EcommerceHelper::isAvailableShipping($products);
-
-    //     $shippingMethodInput = $request->input('shipping_method', ShippingMethodEnum::DEFAULT);
-
-    //     $promotionDiscountAmount = $handleApplyPromotionsService->execute($token);
-    //     $couponDiscountAmount = Arr::get($sessionData, 'coupon_discount_amount');
-    //     $rawTotal = Cart::instance('cart')->rawTotal();
-    //     $orderAmount = max($rawTotal - $promotionDiscountAmount - $couponDiscountAmount, 0);
-
-    //     $shippingAmount = 0;
-
-    //     $shippingData = [];
-    //     if ($isAvailableShipping) {
-    //         $origin = EcommerceHelper::getOriginAddress();
-    //         $shippingData = EcommerceHelper::getShippingData($products, $sessionData, $origin, $orderAmount, $paymentMethod);
-
-    //         $shippingMethodData = $shippingFeeService->execute(
-    //             $shippingData,
-    //             $shippingMethodInput,
-    //             $request->input('shipping_option')
-    //         );
-
-    //         $shippingMethod = Arr::first($shippingMethodData);
-    //         if (! $shippingMethod) {
-    //             throw ValidationException::withMessages([
-    //                 'shipping_method' => trans('validation.exists', ['attribute' => trans('plugins/ecommerce::shipping.shipping_method')]),
-    //             ]);
-    //         }
-
-    //         $shippingAmount = Arr::get($shippingMethod, 'price', 0);
-
-    //         if (get_shipping_setting('free_ship', $shippingMethodInput)) {
-    //             $shippingAmount = 0;
-    //         }
-    //     }
-
-    //     if (session()->has('applied_coupon_code')) {
-    //         $discount = $applyCouponService->getCouponData(session('applied_coupon_code'), $sessionData);
-    //         if (empty($discount)) {
-    //             $removeCouponService->execute();
-    //         } else {
-    //             $shippingAmount = Arr::get($sessionData, 'is_free_shipping') ? 0 : $shippingAmount;
-    //         }
-    //     }
-
-    //     $currentUserId = 0;
-    //     if (auth('customer')->check()) {
-    //         $currentUserId = auth('customer')->id();
-    //     }
-
-    //     $orderAmount += (float)$shippingAmount;
-
-    //     $request->merge([
-    //         'amount' => $orderAmount ?: 0,
-    //         'currency' => $request->input('currency', strtoupper(get_application_currency()->title)),
-    //         'user_id' => $currentUserId,
-    //         'shipping_method' => $isAvailableShipping ? $shippingMethodInput : '',
-    //         'shipping_option' => $isAvailableShipping ? $request->input('shipping_option') : null,
-    //         'shipping_amount' => (float)$shippingAmount,
-    //         'tax_amount' => Cart::instance('cart')->rawTax(),
-    //         'sub_total' => Cart::instance('cart')->rawSubTotal(),
-    //         'coupon_code' => session()->get('applied_coupon_code'),
-    //         'discount_amount' => $promotionDiscountAmount + $couponDiscountAmount,
-    //         'status' => OrderStatusEnum::PENDING,
-    //         'token' => $token,
-    //     ]);
-
-    //     $order = $this->orderRepository->getFirstBy(compact('token'));
-
-    //     $order = $this->createOrderFromData($request->input(), $order);
-
-    //     $this->orderHistoryRepository->createOrUpdate([
-    //         'action' => 'create_order_from_payment_page',
-    //         'description' => __('Order was created from checkout page'),
-    //         'order_id' => $order->id,
-    //     ]);
-
-    //     if ($isAvailableShipping) {
-    //         app(ShipmentInterface::class)->createOrUpdate([
-    //             'order_id' => $order->id,
-    //             'user_id' => 0,
-    //             'weight' => $shippingData ? Arr::get($shippingData, 'weight') : 0,
-    //             'cod_amount' => (is_plugin_active('payment') && $order->payment->id && $order->payment->status != PaymentStatusEnum::COMPLETED) ? $order->amount : 0,
-    //             'cod_status' => ShippingCodStatusEnum::PENDING,
-    //             'type' => $order->shipping_method,
-    //             'status' => ShippingStatusEnum::PENDING,
-    //             'price' => $order->shipping_amount,
-    //             'rate_id' => $shippingData ? Arr::get($shippingMethod, 'id', '') : '',
-    //             'shipment_id' => $shippingData ? Arr::get($shippingMethod, 'shipment_id', '') : '',
-    //             'shipping_company_name' => $shippingData ? Arr::get($shippingMethod, 'company_name', '') : '',
-    //         ]);
-    //     }
-
-    //     if ($appliedCouponCode = session()->get('applied_coupon_code')) {
-    //         Discount::getFacadeRoot()->afterOrderPlaced($appliedCouponCode);
-    //     }
-
-    //     $this->orderProductRepository->deleteBy(['order_id' => $order->id]);
-
-    //     foreach (Cart::instance('cart')->content() as $cartItem) {
-    //         $product = $this->productRepository->findById($cartItem->id);
-
-    //         $data = [
-    //             'order_id' => $order->id,
-    //             'product_id' => $cartItem->id,
-    //             'product_name' => $cartItem->name,
-    //             'product_image' => $product->original_product->image,
-    //             'qty' => $cartItem->qty,
-    //             'weight' => Arr::get($cartItem->options, 'weight', 0),
-    //             'price' => $cartItem->price,
-    //             'tax_amount' => $cartItem->tax,
-    //             'options' => $cartItem->options,
-    //             'product_type' => $product ? $product->product_type : null,
-    //         ];
-
-    //         if ($cartItem->options['options']) {
-    //             $data['product_options'] = $cartItem->options['options'];
-    //         }
-
-    //         $this->orderProductRepository->create($data);
-    //     }
-
-    //     $request->merge([
-    //         'order_id' => $order->id,
-    //     ]);
-
-    //     if (! is_plugin_active('payment')) {
-    //         return redirect()->to(route('public.checkout.success', OrderHelper::getOrderSessionToken()));
-    //     }
-
-    //     $paymentData = [
-    //         'error' => false,
-    //         'message' => false,
-    //         'amount' => (float)format_price($order->amount, null, true),
-    //         'currency' => strtoupper(get_application_currency()->title),
-    //         'type' => $request->input('payment_method'),
-    //         'charge_id' => null,
-    //     ];
-
-    //     $paymentData = apply_filters(FILTER_ECOMMERCE_PROCESS_PAYMENT, $paymentData, $request);
-
-    //     if ($checkoutUrl = Arr::get($paymentData, 'checkoutUrl')) {
-    //         return $response
-    //             ->setError($paymentData['error'])
-    //             ->setNextUrl($checkoutUrl)
-    //             ->setData(['checkoutUrl' => $checkoutUrl])
-    //             ->withInput()
-    //             ->setMessage($paymentData['message']);
-    //     }
-
-    //     if ($paymentData['error'] || ! $paymentData['charge_id']) {
-    //         return $response
-    //             ->setError()
-    //             ->setNextUrl(PaymentHelper::getCancelURL($token))
-    //             ->withInput()
-    //             ->setMessage($paymentData['message'] ?: __('Checkout error!'));
-    //     }
-
-    //     return $response
-    //         ->setNextUrl(PaymentHelper::getRedirectURL($token))
-    //         ->setMessage(__('Checkout successfully!'));
-    // }
-
     public function postCheckout(
         string $token,
         CheckoutRequest $request,
-        BaseHttpResponse $response
+        BaseHttpResponse $response,
+        HandleShippingFeeService $shippingFeeService,
+        HandleApplyCouponService $applyCouponService,
+        HandleRemoveCouponService $removeCouponService,
+        HandleApplyPromotionsService $handleApplyPromotionsService
     ) {
-        // Extract data from the request
-        $shippingOptionId = $request->input('shipping_option[3]');
-        $shippingMethod = $request->input('shipping_method[3]');
-        $couponCode = $request->input('coupon_code');
-        $addressId = $request->input('address[address_id]');
-        $customerName = $request->input('address')['name'];
-        $customerEmail = $request->input('address[email]');
-        $customerPhone = $request->input('address')['phone'];
-        $customerCountry = $request->input('address[country]');
-        $customerState = $request->input('address[state]');
-        $customerCity = $request->input('address[city]');
-        $customerAddress = $request->input('address[address]');
-        $orderAmount = $request->input('amount');
-        $currency = $request->input('currency');
-        $customerId = $request->input('customer_id');
-        $customerType = $request->input('customer_type');
-        $paymentMethod = $request->input('payment_method');
-        $description = $request->input('description');
 
-        // dd($customerName);
+        if (! EcommerceHelper::isCartEnabled()) {
+            abort(404);
+        }
+
+        if (! EcommerceHelper::isEnabledGuestCheckout() && ! auth('customer')->check()) {
+            return $response->setNextUrl(route('customer.login'));
+        }
+
+        if (! Cart::instance('cart')->count()) {
+            return $response
+                ->setError()
+                ->setMessage(__('No products in cart'));
+        }
+
+        $products = Cart::instance('cart')->products();
+
+        if (EcommerceHelper::isEnabledSupportDigitalProducts() && ! EcommerceHelper::canCheckoutForDigitalProducts($products)) {
+            return $response
+                ->setError()
+                ->setNextUrl(route('customer.login'))
+                ->setMessage(__('Your shopping cart has digital product(s), so you need to sign in to continue!'));
+        }
+
+        if (EcommerceHelper::getMinimumOrderAmount() > Cart::instance('cart')->rawSubTotal()) {
+            return $response
+                ->setError()
+                ->setMessage(__('Minimum order amount is :amount, you need to buy more :more to place an order!', [
+                    'amount' => format_price(EcommerceHelper::getMinimumOrderAmount()),
+                    'more' => format_price(EcommerceHelper::getMinimumOrderAmount() - Cart::instance('cart')
+                            ->rawSubTotal()),
+                ]));
+        }
+
+        $sessionData = OrderHelper::getOrderSessionData($token);
+
+        $sessionData = $this->processOrderData($token, $sessionData, $request, true);
+
+        foreach ($products as $product) {
+            if ($product->isOutOfStock()) {
+                return $response
+                    ->setError()
+                    ->setMessage(__('Product :product is out of stock!', ['product' => $product->original_product->name]));
+            }
+        }
+
+        $paymentMethod = $request->input('payment_method', session('selected_payment_method'));
+        if ($paymentMethod) {
+            session()->put('selected_payment_method', $paymentMethod);
+        }
+
+        // if (is_plugin_active('marketplace')) {
+        //     return apply_filters(
+        //         HANDLE_PROCESS_POST_CHECKOUT_ORDER_DATA_ECOMMERCE,
+        //         $products,
+        //         $request,
+        //         $token,
+        //         $sessionData,
+        //         $response
+        //     );
+        // }
+
+        $isAvailableShipping = EcommerceHelper::isAvailableShipping($products);
+
+        $shippingMethodInput = $request->input('shipping_method', ShippingMethodEnum::DEFAULT);
+
+        $promotionDiscountAmount = $handleApplyPromotionsService->execute($token);
+        $couponDiscountAmount = Arr::get($sessionData, 'coupon_discount_amount');
+        $rawTotal = Cart::instance('cart')->rawTotal();
+        $orderAmount = max($rawTotal - $promotionDiscountAmount - $couponDiscountAmount, 0);
+
+        $shippingAmount = 0;
+
+        // $shippingData = [];
+        // if ($isAvailableShipping) {
+        //     $origin = EcommerceHelper::getOriginAddress();
+        //     $shippingData = EcommerceHelper::getShippingData($products, $sessionData, $origin, $orderAmount, $paymentMethod);
+
+        //     $shippingMethodData = $shippingFeeService->execute(
+        //         $shippingData,
+        //         $shippingMethodInput,
+        //         $request->input('shipping_option')
+        //     );
+
+        //     $shippingMethod = Arr::first($shippingMethodData);
+        //     if (! $shippingMethod) {
+        //         throw ValidationException::withMessages([
+        //             'shipping_method' => trans('validation.exists', ['attribute' => trans('plugins/ecommerce::shipping.shipping_method')]),
+        //         ]);
+        //     }
+
+        //     $shippingAmount = Arr::get($shippingMethod, 'price', 0);
+
+        //     if (get_shipping_setting('free_ship', $shippingMethodInput)) {
+        //         $shippingAmount = 0;
+        //     }
+        // }
+
+        // if (session()->has('applied_coupon_code')) {
+        //     $discount = $applyCouponService->getCouponData(session('applied_coupon_code'), $sessionData);
+        //     if (empty($discount)) {
+        //         $removeCouponService->execute();
+        //     } else {
+        //         $shippingAmount = Arr::get($sessionData, 'is_free_shipping') ? 0 : $shippingAmount;
+        //     }
+        // }
+
+        $currentUserId = 0;
+        if (auth('customer')->check()) {
+            $currentUserId = auth('customer')->id();
+        }
+        $shippingData = [];
+        // $orderAmount += (float)$shippingAmount;
+
+        $request->merge([
+            'amount' => $orderAmount ?: 0,
+            'currency' => $request->input('currency', strtoupper(get_application_currency()->title)),
+            'user_id' => $currentUserId,
+            'shipping_method' => $isAvailableShipping ? $shippingMethodInput : '',
+            'shipping_option' => $isAvailableShipping ? $request->input('shipping_option') : null,
+            'shipping_amount' => (float)$shippingAmount,
+            'tax_amount' => Cart::instance('cart')->rawTax(),
+            'sub_total' => Cart::instance('cart')->rawSubTotal(),
+            'coupon_code' => session()->get('applied_coupon_code'),
+            'discount_amount' => $promotionDiscountAmount + $couponDiscountAmount,
+            'status' => OrderStatusEnum::PENDING,
+            'token' => $token,
+        ]);
+
+        $order = $this->orderRepository->getFirstBy(compact('token'));
+
+        $order = $this->createOrderFromData($request->input(), $order);
+
+        $this->orderHistoryRepository->createOrUpdate([
+            'action' => 'create_order_from_payment_page',
+            'description' => __('Order was created from checkout page'),
+            'order_id' => $order->id,
+        ]);
+
+        if ($isAvailableShipping) {
+            app(ShipmentInterface::class)->createOrUpdate([
+                'order_id' => $order->id,
+                'user_id' => 0,
+                'weight' => $shippingData ? Arr::get($shippingData, 'weight') : 0,
+                'cod_amount' => (is_plugin_active('payment') && $order->payment->id && $order->payment->status != PaymentStatusEnum::COMPLETED) ? $order->amount : 0,
+                'cod_status' => ShippingCodStatusEnum::PENDING,
+                'type' => $order->shipping_method,
+                'status' => ShippingStatusEnum::PENDING,
+                'price' => $order->shipping_amount,
+                'rate_id' => $shippingData ? Arr::get($shippingMethod, 'id', '') : '',
+                'shipment_id' => $shippingData ? Arr::get($shippingMethod, 'shipment_id', '') : '',
+                'shipping_company_name' => $shippingData ? Arr::get($shippingMethod, 'company_name', '') : '',
+            ]);
+        }
+
+        if ($appliedCouponCode = session()->get('applied_coupon_code')) {
+            Discount::getFacadeRoot()->afterOrderPlaced($appliedCouponCode);
+        }
+
+        $this->orderProductRepository->deleteBy(['order_id' => $order->id]);
+
+        foreach (Cart::instance('cart')->content() as $cartItem) {
+            $product = $this->productRepository->findById($cartItem->id);
+
+            $data = [
+                'order_id' => $order->id,
+                'product_id' => $cartItem->id,
+                'product_name' => $cartItem->name,
+                'product_image' => $product->original_product->image,
+                'qty' => $cartItem->qty,
+                'weight' => Arr::get($cartItem->options, 'weight', 0),
+                'price' => $cartItem->price,
+                'tax_amount' => $cartItem->tax,
+                'options' => $cartItem->options,
+                'product_type' => $product ? $product->product_type : null,
+            ];
+
+            if ($cartItem->options['options']) {
+                $data['product_options'] = $cartItem->options['options'];
+            }
+
+            $this->orderProductRepository->create($data);
+        }
+
+        $request->merge([
+            'order_id' => $order->id,
+        ]);
+        // $this->stkPush($request, $orderAmount);
+        //call stk push
+        $status = $this->stkPush($request, $orderAmount);
+        //wait for payment to be completed
+        if($status == 0) {
+            // dd( $currentUserId, $orderAmount, $order->id, $order->payment->id);
+            //create payment record
+            //         1	id Primary	bigint(20)		UNSIGNED	No	None		AUTO_INCREMENT	Change Change	Drop Drop
+            // 2	currency	varchar(120)	utf8mb4_unicode_ci		Yes	NULL			Change Change	Drop Drop
+            // 3	user_id	bigint(20)		UNSIGNED	No	0			Change Change	Drop Drop
+            // 4	charge_id	varchar(255)	utf8mb4_unicode_ci		Yes	NULL			Change Change	Drop Drop
+            // 5	payment_channel	varchar(60)	utf8mb4_unicode_ci		Yes	NULL			Change Change	Drop Drop
+            // 6	description	varchar(255)	utf8mb4_unicode_ci		Yes	NULL			Change Change	Drop Drop
+            // 7	amount	decimal(15,2)		UNSIGNED	No	None			Change Change	Drop Drop
+            // 8	order_id	bigint(20)		UNSIGNED	Yes	NULL			Change Change	Drop Drop
+            // 9	status	varchar(60)	utf8mb4_unicode_ci		Yes	pending			Change Change	Drop Drop
+            // 10	payment_type	varchar(191)	utf8mb4_unicode_ci		Yes	confirm			Change Change	Drop Drop
+            // 11	customer_id	bigint(20)		UNSIGNED	Yes	NULL			Change Change	Drop Drop
+            // 12	refunded_amount	decimal(15,2)		UNSIGNED	Yes	NULL			Change Change	Drop Drop
+            // 13	refund_note	varchar(255)	utf8mb4_unicode_ci		Yes	NULL			Change Change	Drop Drop
+            // 14	created_at	timestamp			Yes	NULL			Change Change	Drop Drop
+            // 15	updated_at	timestamp			Yes	NULL			Change Change	Drop Drop
+            // 16	customer_type	varchar(255)	utf8mb4_unicode_ci		Yes	NULL			Change Change	Drop Drop
+            // 17	metadata	mediumtext	utf8mb4_unicode_ci		Yes	NULL			Change Change	Drop Drop
+            //check if order exists with same order id
+            $order_payment = DB::table('payments')->where('order_id', $order->id)->get();
+
+            if ($order_payment->count() == 0) {
+                $payment = DB::table('payments')->insert([
+                    'currency' => $request->input('currency', strtoupper(get_application_currency()->title)),
+                    'user_id' => $currentUserId,
+                    'charge_id' => $request->input('charge_id'),
+                    'payment_channel' => $request->input('payment_method'),
+                    'description' => $request->input('description'),
+                    'amount' => $orderAmount,
+                    'order_id' => $order->id,
+                    'status' => $request->input('status'),
+                    'payment_type' => $request->input('payment_type'),
+                    'customer_id' => $request->input('customer_id'),
+                    'refunded_amount' => $request->input('refunded_amount'),
+                    'refund_note' => $request->input('refund_note'),
+                    'customer_type' => $request->input('customer_type'),
+                    'metadata' => $request->input('metadata'),
+                    'created_at' => Carbon::now(),
+                    'updated_at' => Carbon::now(),
+                ]);
+
+            }
+
+
+            $html = '
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>Landing Page</title>
+                <style>
+                  body {
+                    margin: 0;
+                    padding: 0;
+                    font-family: sans-serif;
+                  }
+            
+                  .container {
+                    width: 500px;
+                    margin: 0 auto;
+                  }
+            
+                  #confirm {
+                    background-color: green;
+                    color: white;
+                    padding: 10px;
+                    border: none;
+                    cursor: pointer;
+                    position: absolute;
+                    top: 50%;
+                    left: 40%;
+                  }
+                  .button {
+                    background-color: #e2161c;
+                    /* Green */
+                    border: none;
+                    color: white;
+                    padding: 10px;
+                    text-align: center;
+                    text-decoration: none;
+                    display: inline-block;
+                    font-size: 16px;
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    cursor: pointer;
+                  }
+                  h1 {
+                    font-family: Verdana, Geneva, Tahoma, sans-serif;
+                    position: absolute;
+                    top: 30%;
+                    left: 40%;
+                  }
+                </style>
+              </head>
+              <body>
+                <div class="container">
+                  <h1>Confirm Payment</h1>
+                  <button class="button" id="confirm" onclick="goBack()">Confirm</button>
+                  <button class="button">Request Stk</button>
+                </div>
+                <script>
+                  function goBack() {
+                    window.history.back();
+                  }
+                  url = window.location.href;
+                  url = url.split("/");
+                  //remove the last element of the array
+                  url.pop();
+                  //join the array back to a string
+                  url = url.join("/");
+                  //go to the url
+                  // window.location.href = url;
+            
+                  console.log(url);
+                </script>
+              </body>
+            </html>
+            
+            ';
+
+            // Now $html contains your HTML code as a string
+            // echo $html;
+
+            sleep(30);
+
+            $stk = StkPush::where('Token', $token)->orderBy('id', 'desc')->first();
+            // $stk->CheckoutRequestID = 0;
+            if($stk->ResultCode == 1032) {
+                //get the payment that is for the order
+                $payment_id = DB::table('payments')->where('order_id', $order->id)->pluck('id');
+                //update the payment with the checkout request id
+                $payment = DB::table('payments')->where('id', $payment_id)->update([
+                    'charge_id' => $stk->MpesaReceiptNumber,
+                    'status' => 'completed',
+                    'payment_type' => 'confirm',
+                    'updated_at' => Carbon::now(),
+                ]);
+                //update the order status
+                $order = DB::table('ec_orders')->where('id', $order->id)->update([
+                    'status' => 'completed',
+                    'payment_id' => implode(',', $payment_id->toArray()),
+                    'updated_at' => Carbon::now(),
+                ]);
+
+
+                return redirect()->to(route('public.checkout.success', OrderHelper::getOrderSessionToken()));
+            } else {
+                return redirect()->back()->with('error', 'Payment not confirmed');
+            }
+        } else {
+            $this->stkPush($request, $orderAmount);
+        }
+
+
+
+        // if (! is_plugin_active('payment')) {
+        //     return redirect()->to(route('public.checkout.success', OrderHelper::getOrderSessionToken()));
+        // }
+
+        // $paymentData = [
+        //     'error' => false,
+        //     'message' => false,
+        //     'amount' => (float)format_price($order->amount, null, true),
+        //     'currency' => strtoupper(get_application_currency()->title),
+        //     'type' => $request->input('payment_method'),
+        //     'charge_id' => null,
+        // ];
+
+        // $paymentData = apply_filters(FILTER_ECOMMERCE_PROCESS_PAYMENT, $paymentData, $request);
+
+        // if ($checkoutUrl = Arr::get($paymentData, 'checkoutUrl')) {
+        //     return $response
+        //         ->setError($paymentData['error'])
+        //         ->setNextUrl($checkoutUrl)
+        //         ->setData(['checkoutUrl' => $checkoutUrl])
+        //         ->withInput()
+        //         ->setMessage($paymentData['message']);
+        // }
+
+        // if ($paymentData['error'] || ! $paymentData['charge_id']) {
+        //     return $response
+        //         ->setError()
+        //         ->setNextUrl(PaymentHelper::getCancelURL($token))
+        //         ->withInput()
+        //         ->setMessage($paymentData['message'] ?: __('Checkout error!'));
+        // }
+
+        // return $response
+        //     ->setNextUrl(PaymentHelper::getRedirectURL($token))
+        //     ->setMessage(__('Checkout successfully!'));
+    }
+
+
+    public function stkPush(
+        CheckoutRequest $request,
+        $orderAmount
+    ) {
+
+        $customerPhone = $request->input('address')['phone'];
+        $customerName = $request->input('address')['name'];
+        $description = $request->input('description');
+        $mpesaNumber = $request->input('mpesa_phone_number');
+        //token
+        $token = $request->input('token');
+
 
         // STKPUSH
         date_default_timezone_set('Africa/Nairobi');
@@ -780,20 +930,25 @@ class PublicCheckoutController
         $consumerSecret = get_payment_setting('app_consumer_secret', "M-pesa"); // Fill with your app Secret
         # define the variales
         # provide the following details, this part is found on your test credentials on the developer account
-        $Amount = intval($orderAmount * 146.50);
+        $Amount = intval($orderAmount);
         $BusinessShortCode = get_payment_setting('business_shortcode', "M-pesa"); //sandbox
         $Passkey = get_payment_setting('online_pass_key', "M-pesa");
-
         //generate the access token
-        $response = Http::withBasicAuth($consumerKey, $consumerSecret)->get('https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials');
+        $credentials = base64_encode($consumerKey.':'.$consumerSecret);
+        $url = 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials';
+        $curl = curl_init();
+        curl_setopt($curl, CURLOPT_URL, $url);
+        curl_setopt($curl, CURLOPT_HTTPHEADER, array('Authorization: Basic '.$credentials)); //setting a custom header
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        $curl_response = curl_exec($curl);
 
-        $AccessToken = json_decode($response->getBody());
+        $AccessToken = json_decode($curl_response);
 
         //initiate the transaction
         $curl = curl_init();
         curl_setopt($curl, CURLOPT_URL, 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest');
         curl_setopt($curl, CURLOPT_HTTPHEADER, array('Content-Type:application/json','Authorization:Bearer '.$AccessToken->access_token)); //setting custom header
-        $tokenString = '12345678';
+        $tokenString = $token;
         $curl_post_data = array(
           //Fill in the request parameters with valid values
           'BusinessShortCode' => $BusinessShortCode,
@@ -801,10 +956,10 @@ class PublicCheckoutController
           'Timestamp' => date("YmdHis"),
           'TransactionType' => 'CustomerPayBillOnline',
           'Amount' => $Amount,
-          'PartyA' => $customerPhone, // replace this with your phone number
+          'PartyA' => $mpesaNumber ? $mpesaNumber : $customerPhone, // replace this with your phone number
           'PartyB' => $BusinessShortCode,
-          'PhoneNumber' => $customerPhone, // replace this with your phone number
-          'CallBackURL' => 'https://app.askaritechnologies.com/api/shop/callback'. '?token=' . $tokenString,
+          'PhoneNumber' => $mpesaNumber ? $mpesaNumber : $customerPhone, // replace this with your phone number
+          'CallBackURL' => 'https://app.askaritechnologies.com/api/shop/callback?token='.$tokenString,
           'AccountReference' => $customerName,
           'TransactionDesc' => 'Testing stk push on sandbox'
         );
@@ -817,22 +972,29 @@ class PublicCheckoutController
 
         $curl_response = curl_exec($curl);
 
-        $transactionStatusCollection = StkPush::where('Token', $tokenString)->get();
+        // Check if the response is valid JSON
+        if ($curl_response !== false) {
+            // Decode the JSON response
+            $response_data = json_decode($curl_response);
 
-        foreach ($transactionStatusCollection as $transactionStatus) {
-            $resultCode = $transactionStatus->ResultCode;
-            $resultDesc = $transactionStatus->ResultDesc;
-
-            //if the transaction is successful
-            if($resultCode == 0) {
-                echo "Transaction Successful";
+            // Check if ResponseCode exists in the response
+            if (isset($response_data->ResponseCode)) {
+                // Return the value of ResponseCode
+                $response_code = $response_data->ResponseCode;
+                return $response_code;
             } else {
-                echo "Transaction Failed";
+                // Handle the case where ResponseCode does not exist in the response
+                // You might want to log this or return an error response
+                return 'ResponseCode not found in the response';
             }
+        } else {
+            // Handle the case where the response is not valid JSON
+            // You might want to log this or return an error response
+            return 'Invalid JSON response';
         }
 
-
     }
+
 
     public function getStkPushResult(Request $request)
     {
@@ -849,29 +1011,54 @@ class PublicCheckoutController
 
         if($content->Body->stkCallback->ResultCode == 0) {
             //save to transaction table
-            $stk_push = new StkPush();
-            $stk_push->MerchantRequestID = $content->Body->stkCallback->MerchantRequestID;
-            $stk_push->CheckoutRequestID = $content->Body->stkCallback->CheckoutRequestID;
-            $stk_push->ResultCode = $content->Body->stkCallback->ResultCode;
-            $stk_push->ResultDesc = $content->Body->stkCallback->ResultDesc;
-            $stk_push->Amount = $content->Body->stkCallback->CallbackMetadata->Item[0]->Value;
-            $stk_push->MpesaReceiptNumber = $content->Body->stkCallback->CallbackMetadata->Item[1]->Value;
-            $stk_push->TransactionDate = $content->Body->stkCallback->CallbackMetadata->Item[2]->Value;
-            $stk_push->PhoneNumber = $content->Body->stkCallback->CallbackMetadata->Item[3]->Value;
-            $stk_push->Token = $token;
+            // $stk_push = new StkPush();
+            // $stk_push->MerchantRequestID = $content->Body->stkCallback->MerchantRequestID;
+            // $stk_push->CheckoutRequestID = $content->Body->stkCallback->CheckoutRequestID;
+            // $stk_push->ResultCode = $content->Body->stkCallback->ResultCode;
+            // $stk_push->ResultDesc = $content->Body->stkCallback->ResultDesc;
+            // $stk_push->Amount = $content->Body->stkCallback->CallbackMetadata->Item[0]->Value;
+            // $stk_push->MpesaReceiptNumber = $content->Body->stkCallback->CallbackMetadata->Item[1]->Value;
+            // $stk_push->TransactionDate = $content->Body->stkCallback->CallbackMetadata->Item[2]->Value;
+            // $stk_push->PhoneNumber = $content->Body->stkCallback->CallbackMetadata->Item[3]->Value;
+            // $stk_push->Token = $token;
 
-            $stk_push->save();
+            // $stk_push->save();
+
+            $stk_push = DB::table('stk_push')->insert([
+                'MerchantRequestID' => $content->Body->stkCallback->MerchantRequestID,
+                'CheckoutRequestID' => $content->Body->stkCallback->CheckoutRequestID,
+                'ResultCode' => $content->Body->stkCallback->ResultCode,
+                'ResultDesc' => $content->Body->stkCallback->ResultDesc,
+                'Amount' => $content->Body->stkCallback->CallbackMetadata->Item[0]->Value,
+                'MpesaReceiptNumber' => $content->Body->stkCallback->CallbackMetadata->Item[1]->Value,
+                'TransactionDate' => $content->Body->stkCallback->CallbackMetadata->Item[2]->Value,
+                'PhoneNumber' => $content->Body->stkCallback->CallbackMetadata->Item[3]->Value,
+                'Token' => $token,
+                'created_at' => Carbon::now(),
+                'updated_at' => Carbon::now(),
+            ]);
+
 
 
         } else {
-            $stk_push = new StkPush();
-            $stk_push->MerchantRequestID = $content->Body->stkCallback->MerchantRequestID;
-            $stk_push->CheckoutRequestID = $content->Body->stkCallback->CheckoutRequestID;
-            $stk_push->ResultCode = $content->Body->stkCallback->ResultCode;
-            $stk_push->ResultDesc = $content->Body->stkCallback->ResultDesc;
-            $stk_push->Token = $token;
+            // $stk_push = new StkPush();
+            // $stk_push->MerchantRequestID = $content->Body->stkCallback->MerchantRequestID;
+            // $stk_push->CheckoutRequestID = $content->Body->stkCallback->CheckoutRequestID;
+            // $stk_push->ResultCode = $content->Body->stkCallback->ResultCode;
+            // $stk_push->ResultDesc = $content->Body->stkCallback->ResultDesc;
+            // $stk_push->Token = $token;
 
-            $stk_push->save();
+            // $stk_push->save();
+
+            $stk_push = DB::table('stk_push')->insert([
+                'MerchantRequestID' => $content->Body->stkCallback->MerchantRequestID,
+                'CheckoutRequestID' => $content->Body->stkCallback->CheckoutRequestID,
+                'ResultCode' => $content->Body->stkCallback->ResultCode,
+                'ResultDesc' => $content->Body->stkCallback->ResultDesc,
+                'Token' => $token,
+                'created_at' => Carbon::now(),
+                'updated_at' => Carbon::now(),
+            ]);
 
         }
 
