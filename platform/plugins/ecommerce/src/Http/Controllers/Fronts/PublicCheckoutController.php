@@ -523,6 +523,14 @@ class PublicCheckoutController
         HandleRemoveCouponService $removeCouponService,
         HandleApplyPromotionsService $handleApplyPromotionsService
     ) {
+        //validate the request
+        $validator = Validator::make($request->all(), [
+            'mpesa_phone_number' => 'required|numeric|regex:/^254[0-9]{9}$/|min:12',
+        ]);
+
+        if ($validator->fails()) {
+            return $response->setError()->setMessage($validator->errors()->first());
+        }
 
         if (! EcommerceHelper::isCartEnabled()) {
             abort(404);
@@ -715,30 +723,13 @@ class PublicCheckoutController
         $status = $this->stkPush($request, $orderAmount);
         //wait for payment to be completed
         if($status == 0) {
-            // dd( $currentUserId, $orderAmount, $order->id, $order->payment->id);
-            //create payment record
-            //         1	id Primary	bigint(20)		UNSIGNED	No	None		AUTO_INCREMENT	Change Change	Drop Drop
-            // 2	currency	varchar(120)	utf8mb4_unicode_ci		Yes	NULL			Change Change	Drop Drop
-            // 3	user_id	bigint(20)		UNSIGNED	No	0			Change Change	Drop Drop
-            // 4	charge_id	varchar(255)	utf8mb4_unicode_ci		Yes	NULL			Change Change	Drop Drop
-            // 5	payment_channel	varchar(60)	utf8mb4_unicode_ci		Yes	NULL			Change Change	Drop Drop
-            // 6	description	varchar(255)	utf8mb4_unicode_ci		Yes	NULL			Change Change	Drop Drop
-            // 7	amount	decimal(15,2)		UNSIGNED	No	None			Change Change	Drop Drop
-            // 8	order_id	bigint(20)		UNSIGNED	Yes	NULL			Change Change	Drop Drop
-            // 9	status	varchar(60)	utf8mb4_unicode_ci		Yes	pending			Change Change	Drop Drop
-            // 10	payment_type	varchar(191)	utf8mb4_unicode_ci		Yes	confirm			Change Change	Drop Drop
-            // 11	customer_id	bigint(20)		UNSIGNED	Yes	NULL			Change Change	Drop Drop
-            // 12	refunded_amount	decimal(15,2)		UNSIGNED	Yes	NULL			Change Change	Drop Drop
-            // 13	refund_note	varchar(255)	utf8mb4_unicode_ci		Yes	NULL			Change Change	Drop Drop
-            // 14	created_at	timestamp			Yes	NULL			Change Change	Drop Drop
-            // 15	updated_at	timestamp			Yes	NULL			Change Change	Drop Drop
-            // 16	customer_type	varchar(255)	utf8mb4_unicode_ci		Yes	NULL			Change Change	Drop Drop
-            // 17	metadata	mediumtext	utf8mb4_unicode_ci		Yes	NULL			Change Change	Drop Drop
-            //check if order exists with same order id
+            //get the payment that is for the order
             $order_payment = DB::table('payments')->where('order_id', $order->id)->get();
 
-            if ($order_payment->count() == 0) {
-                $payment = DB::table('payments')->insert([
+            if (!$order_payment) {
+                DB::beginTransaction();
+
+                $payment = DB::table('payments')->insertGetId([
                     'currency' => $request->input('currency', strtoupper(get_application_currency()->title)),
                     'user_id' => $currentUserId,
                     'charge_id' => $request->input('charge_id'),
@@ -759,91 +750,11 @@ class PublicCheckoutController
 
             }
 
-
-            $html = '
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <title>Landing Page</title>
-                <style>
-                  body {
-                    margin: 0;
-                    padding: 0;
-                    font-family: sans-serif;
-                  }
-            
-                  .container {
-                    width: 500px;
-                    margin: 0 auto;
-                  }
-            
-                  #confirm {
-                    background-color: green;
-                    color: white;
-                    padding: 10px;
-                    border: none;
-                    cursor: pointer;
-                    position: absolute;
-                    top: 50%;
-                    left: 40%;
-                  }
-                  .button {
-                    background-color: #e2161c;
-                    /* Green */
-                    border: none;
-                    color: white;
-                    padding: 10px;
-                    text-align: center;
-                    text-decoration: none;
-                    display: inline-block;
-                    font-size: 16px;
-                    position: absolute;
-                    top: 50%;
-                    left: 50%;
-                    cursor: pointer;
-                  }
-                  h1 {
-                    font-family: Verdana, Geneva, Tahoma, sans-serif;
-                    position: absolute;
-                    top: 30%;
-                    left: 40%;
-                  }
-                </style>
-              </head>
-              <body>
-                <div class="container">
-                  <h1>Confirm Payment</h1>
-                  <button class="button" id="confirm" onclick="goBack()">Confirm</button>
-                  <button class="button">Request Stk</button>
-                </div>
-                <script>
-                  function goBack() {
-                    window.history.back();
-                  }
-                  url = window.location.href;
-                  url = url.split("/");
-                  //remove the last element of the array
-                  url.pop();
-                  //join the array back to a string
-                  url = url.join("/");
-                  //go to the url
-                  // window.location.href = url;
-            
-                  console.log(url);
-                </script>
-              </body>
-            </html>
-            
-            ';
-
-            // Now $html contains your HTML code as a string
-            // echo $html;
-
             sleep(30);
 
             $stk = StkPush::where('Token', $token)->orderBy('id', 'desc')->first();
             // $stk->CheckoutRequestID = 0;
-            if($stk->ResultCode == 1032) {
+            if($stk->ResultCode == 0) {
                 //get the payment that is for the order
                 $payment_id = DB::table('payments')->where('order_id', $order->id)->pluck('id');
                 //update the payment with the checkout request id
@@ -863,7 +774,7 @@ class PublicCheckoutController
 
                 return redirect()->to(route('public.checkout.success', OrderHelper::getOrderSessionToken()));
             } else {
-                return redirect()->back()->with('error', 'Payment not confirmed');
+                return redirect()->back()->withErrors($stk->ResultDesc);
             }
         } else {
             $this->stkPush($request, $orderAmount);
@@ -1006,61 +917,43 @@ class PublicCheckoutController
         parse_str($parsedUrl['query'], $query);
         $token = isset($query['token']) ? $query['token'] : null;
 
+        // Check if "ResultCode" is present in the response
+        if (isset($content->Body->stkCallback->ResultCode)) {
+            $resultCode = $content->Body->stkCallback->ResultCode;
 
+            if ($resultCode === 0) {
+                // The request was successful
+                $mpesa_transaction = DB::table('stk_push')->insert([
+                    'MerchantRequestID' => $content->Body->stkCallback->MerchantRequestID,
+                    'CheckoutRequestID' => $content->Body->stkCallback->CheckoutRequestID,
+                    'ResultCode' => $content->Body->stkCallback->ResultCode,
+                    'ResultDesc' => $content->Body->stkCallback->ResultDesc,
+                    'Amount' => $content->Body->stkCallback->CallbackMetadata->Item[0]->Value,
+                    'MpesaReceiptNumber' => $content->Body->stkCallback->CallbackMetadata->Item[1]->Value,
+                    'TransactionDate' => (string)$content->Body->stkCallback->CallbackMetadata->Item[2]->Value,
+                    'PhoneNumber' => (string)$content->Body->stkCallback->CallbackMetadata->Item[3]->Value,
+                    'Token' => $token,
+                    'created_at' => Carbon::now(),
+                    'updated_at' => Carbon::now(),
 
+                ]);
+            } else {
+                // The request encountered an error
 
-        if($content->Body->stkCallback->ResultCode == 0) {
-            //save to transaction table
-            // $stk_push = new StkPush();
-            // $stk_push->MerchantRequestID = $content->Body->stkCallback->MerchantRequestID;
-            // $stk_push->CheckoutRequestID = $content->Body->stkCallback->CheckoutRequestID;
-            // $stk_push->ResultCode = $content->Body->stkCallback->ResultCode;
-            // $stk_push->ResultDesc = $content->Body->stkCallback->ResultDesc;
-            // $stk_push->Amount = $content->Body->stkCallback->CallbackMetadata->Item[0]->Value;
-            // $stk_push->MpesaReceiptNumber = $content->Body->stkCallback->CallbackMetadata->Item[1]->Value;
-            // $stk_push->TransactionDate = $content->Body->stkCallback->CallbackMetadata->Item[2]->Value;
-            // $stk_push->PhoneNumber = $content->Body->stkCallback->CallbackMetadata->Item[3]->Value;
-            // $stk_push->Token = $token;
-
-            // $stk_push->save();
-
-            $stk_push = DB::table('stk_push')->insert([
-                'MerchantRequestID' => $content->Body->stkCallback->MerchantRequestID,
-                'CheckoutRequestID' => $content->Body->stkCallback->CheckoutRequestID,
-                'ResultCode' => $content->Body->stkCallback->ResultCode,
-                'ResultDesc' => $content->Body->stkCallback->ResultDesc,
-                'Amount' => $content->Body->stkCallback->CallbackMetadata->Item[0]->Value,
-                'MpesaReceiptNumber' => $content->Body->stkCallback->CallbackMetadata->Item[1]->Value,
-                'TransactionDate' => $content->Body->stkCallback->CallbackMetadata->Item[2]->Value,
-                'PhoneNumber' => $content->Body->stkCallback->CallbackMetadata->Item[3]->Value,
-                'Token' => $token,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ]);
-
-
-
-        } else {
-            // $stk_push = new StkPush();
-            // $stk_push->MerchantRequestID = $content->Body->stkCallback->MerchantRequestID;
-            // $stk_push->CheckoutRequestID = $content->Body->stkCallback->CheckoutRequestID;
-            // $stk_push->ResultCode = $content->Body->stkCallback->ResultCode;
-            // $stk_push->ResultDesc = $content->Body->stkCallback->ResultDesc;
-            // $stk_push->Token = $token;
-
-            // $stk_push->save();
-
-            $stk_push = DB::table('stk_push')->insert([
-                'MerchantRequestID' => $content->Body->stkCallback->MerchantRequestID,
-                'CheckoutRequestID' => $content->Body->stkCallback->CheckoutRequestID,
-                'ResultCode' => $content->Body->stkCallback->ResultCode,
-                'ResultDesc' => $content->Body->stkCallback->ResultDesc,
-                'Token' => $token,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ]);
-
+                $mpesa_transaction = DB::table('stk_push')->insert([
+                    'MerchantRequestID' => $content->Body->stkCallback->MerchantRequestID,
+                    'CheckoutRequestID' => $content->Body->stkCallback->CheckoutRequestID,
+                    'ResultCode' => $content->Body->stkCallback->ResultCode,
+                    'ResultDesc' => $content->Body->stkCallback->ResultDesc,
+                    'Token' => $token,
+                    'created_at' => Carbon::now(),
+                    'updated_at' => Carbon::now(),
+                ]);
+            }
         }
+
+
+
 
 
     }

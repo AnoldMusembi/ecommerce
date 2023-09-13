@@ -241,8 +241,8 @@
                                     class="control-label">{{ __('Mpesa Phone Number') }}</label>
                                 <br>
                                 <input type="text" name="mpesa_phone_number" id="mpesa_phone_number" rows="3"
-                                    class="form-control"
-                                    placeholder="{{ __('2547012345678') }}">{{ old('mpesa_phone_number') }}</textarea>
+                                    class="form-control" placeholder="{{ __('2547012345678') }}"
+                                    required>{{ old('mpesa_phone_number') }}</textarea>
                                 {!! Form::error('mpesa_phone_number', $errors) !!}
                             </div>
                         @endif
@@ -321,7 +321,27 @@
 @stop
 
 @push('footer')
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/izitoast/1.4.0/css/iziToast.min.css" />
     <script type="text/javascript" src="{{ asset('vendor/core/core/js-validation/js/js-validation.js') }}"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/izitoast/1.4.0/js/iziToast.min.js"></script>
+    <script>
+        @if ($errors->any())
+            window.onload = function() {
+                // Loop through each error message and display it using IziToast
+                @foreach ($errors->all() as $error)
+                    iziToast.error({
+                        title: "Error",
+                        message: "{{ $error }}",
+                        position: "topLeft",
+                        timeout: 10000,
+                        transitionIn: "fadeInDown"
+                    });
+                @endforeach
+            };
+        @endif
+    </script>
+
     {!! JsValidator::formRequest(
         \Botble\Ecommerce\Http\Requests\SaveCheckoutInformationRequest::class,
         '#checkout-form',
