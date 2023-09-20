@@ -842,11 +842,11 @@ class PublicCheckoutController
         # define the variales
         # provide the following details, this part is found on your test credentials on the developer account
         $Amount = intval($orderAmount);
-        $BusinessShortCode = get_payment_setting('business_shortcode', "M-pesa"); //sandbox
+        $BusinessShortCode = get_payment_setting('business_shortcode', "M-pesa"); //api
         $Passkey = get_payment_setting('online_pass_key', "M-pesa");
         //generate the access token
         $credentials = base64_encode($consumerKey.':'.$consumerSecret);
-        $url = 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials';
+        $url = 'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials';
         $curl = curl_init();
         curl_setopt($curl, CURLOPT_URL, $url);
         curl_setopt($curl, CURLOPT_HTTPHEADER, array('Authorization: Basic '.$credentials)); //setting a custom header
@@ -857,7 +857,7 @@ class PublicCheckoutController
 
         //initiate the transaction
         $curl = curl_init();
-        curl_setopt($curl, CURLOPT_URL, 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest');
+        curl_setopt($curl, CURLOPT_URL, 'https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest');
         curl_setopt($curl, CURLOPT_HTTPHEADER, array('Content-Type:application/json','Authorization:Bearer '.$AccessToken->access_token)); //setting custom header
         $tokenString = $token;
         $curl_post_data = array(
@@ -872,7 +872,7 @@ class PublicCheckoutController
           'PhoneNumber' => $mpesaNumber ? $mpesaNumber : $customerPhone, // replace this with your phone number
           'CallBackURL' => 'https://app.askaritechnologies.com/api/shop/callback?token='.$tokenString,
           'AccountReference' => $customerName,
-          'TransactionDesc' => 'Testing stk push on sandbox'
+          'TransactionDesc' => 'Testing stk push on api'
         );
 
         $data_string = json_encode($curl_post_data);
