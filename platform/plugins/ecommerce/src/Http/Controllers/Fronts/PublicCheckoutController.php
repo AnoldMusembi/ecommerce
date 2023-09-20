@@ -726,8 +726,7 @@ class PublicCheckoutController
             //get the payment that is for the order
             $order_payment = DB::table('payments')->where('order_id', $order->id)->get();
 
-            if (!$order_payment) {
-                DB::beginTransaction();
+            if (count($order_payment) == 0) {
 
                 $payment = DB::table('payments')->insertGetId([
                     'currency' => $request->input('currency', strtoupper(get_application_currency()->title)),
@@ -748,6 +747,7 @@ class PublicCheckoutController
                     'updated_at' => Carbon::now(),
                 ]);
 
+
             }
 
             sleep(30);
@@ -755,8 +755,11 @@ class PublicCheckoutController
             $stk = StkPush::where('Token', $token)->orderBy('id', 'desc')->first();
             // $stk->CheckoutRequestID = 0;
             if($stk->ResultCode == 0) {
-                //get the payment that is for the order
-                $payment_id = DB::table('payments')->where('order_id', $order->id)->pluck('id');
+                //get the payment_id as int that is for the order
+                $payment_id = DB::table('payments')->where('order_id', $order->id)->pluck('id')->toArray();
+                //convert the payment_id to int from array
+                $payment_id = intval($payment_id[0]);
+
                 //update the payment with the checkout request id
                 $payment = DB::table('payments')->where('id', $payment_id)->update([
                     'charge_id' => $stk->MpesaReceiptNumber,
@@ -767,7 +770,7 @@ class PublicCheckoutController
                 //update the order status
                 $order = DB::table('ec_orders')->where('id', $order->id)->update([
                     'status' => 'completed',
-                    'payment_id' => implode(',', $payment_id->toArray()),
+                    'payment_id' => $payment_id,
                     'updated_at' => Carbon::now(),
                 ]);
 
@@ -872,7 +875,7 @@ class PublicCheckoutController
           'PhoneNumber' => $mpesaNumber ? $mpesaNumber : $customerPhone, // replace this with your phone number
           'CallBackURL' => 'https://app.askaritechnologies.com/api/shop/callback?token='.$tokenString,
           'AccountReference' => $customerName,
-          'TransactionDesc' => 'Testing stk push on api'
+          'TransactionDesc' => 'Testing stk push on sandbox'
         );
 
         $data_string = json_encode($curl_post_data);
