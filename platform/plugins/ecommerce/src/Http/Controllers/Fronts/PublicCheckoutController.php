@@ -718,7 +718,6 @@ class PublicCheckoutController
         $request->merge([
             'order_id' => $order->id,
         ]);
-        // $this->stkPush($request, $orderAmount);
         //call stk push
         $status = $this->stkPush($request, $orderAmount);
         //wait for payment to be completed
@@ -750,34 +749,38 @@ class PublicCheckoutController
 
             }
 
-            sleep(30);
+            sleep(40);
 
             $stk = StkPush::where('Token', $token)->orderBy('id', 'desc')->first();
-            // $stk->CheckoutRequestID = 0;
-            if($stk->ResultCode == 0) {
-                //get the payment_id as int that is for the order
-                $payment_id = DB::table('payments')->where('order_id', $order->id)->pluck('id')->toArray();
-                //convert the payment_id to int from array
-                $payment_id = intval($payment_id[0]);
-
-                //update the payment with the checkout request id
-                $payment = DB::table('payments')->where('id', $payment_id)->update([
-                    'charge_id' => $stk->MpesaReceiptNumber,
-                    'status' => 'completed',
-                    'payment_type' => 'confirm',
-                    'updated_at' => Carbon::now(),
-                ]);
-                //update the order status
-                $order = DB::table('ec_orders')->where('id', $order->id)->update([
-                    'status' => 'completed',
-                    'payment_id' => $payment_id,
-                    'updated_at' => Carbon::now(),
-                ]);
-
-
-                return redirect()->to(route('public.checkout.success', OrderHelper::getOrderSessionToken()));
+            //ensure stk is not null
+            if($stk == null) {
+                return redirect()->back()->withErrors('Payment not received');
             } else {
-                return redirect()->back()->withErrors($stk->ResultDesc);
+                if($stk->ResultCode == 0) {
+                    //get the payment_id as int that is for the order
+                    $payment_id = DB::table('payments')->where('order_id', $order->id)->pluck('id')->toArray();
+                    //convert the payment_id to int from array
+                    $payment_id = intval($payment_id[0]);
+
+                    //update the payment with the checkout request id
+                    $payment = DB::table('payments')->where('id', $payment_id)->update([
+                        'charge_id' => $stk->MpesaReceiptNumber,
+                        'status' => 'completed',
+                        'payment_type' => 'confirm',
+                        'updated_at' => Carbon::now(),
+                    ]);
+                    //update the order status
+                    $order = DB::table('ec_orders')->where('id', $order->id)->update([
+                        'status' => 'completed',
+                        'payment_id' => $payment_id,
+                        'updated_at' => Carbon::now(),
+                    ]);
+
+
+                    return redirect()->to(route('public.checkout.success', OrderHelper::getOrderSessionToken()));
+                } else {
+                    return redirect()->back()->withErrors($stk->ResultDesc);
+                }
             }
         } else {
             $this->stkPush($request, $orderAmount);
