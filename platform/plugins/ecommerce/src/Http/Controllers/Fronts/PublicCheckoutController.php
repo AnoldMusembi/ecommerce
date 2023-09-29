@@ -749,7 +749,7 @@ class PublicCheckoutController
 
             }
 
-            sleep(40);
+            sleep(25);
 
             $stk = StkPush::where('Token', $token)->orderBy('id', 'desc')->first();
             //ensure stk is not null
