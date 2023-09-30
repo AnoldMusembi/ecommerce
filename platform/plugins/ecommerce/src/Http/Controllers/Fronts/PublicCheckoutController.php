@@ -749,7 +749,7 @@ class PublicCheckoutController
 
             }
 
-            sleep(25);
+            sleep(22);
 
             $stk = StkPush::where('Token', $token)->orderBy('id', 'desc')->first();
             //ensure stk is not null
@@ -782,8 +782,6 @@ class PublicCheckoutController
                     return redirect()->back()->withErrors($stk->ResultDesc);
                 }
             }
-        } else {
-            $this->stkPush($request, $orderAmount);
         }
 
 
