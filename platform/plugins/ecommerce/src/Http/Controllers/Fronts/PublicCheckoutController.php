@@ -749,40 +749,48 @@ class PublicCheckoutController
 
             }
 
-            sleep(22);
+            sleep(10);
 
-            $stk = StkPush::where('Token', $token)->orderBy('id', 'desc')->first();
-            //ensure stk is not null
-            if($stk == null) {
-                return redirect()->back()->withErrors('Payment not received');
-            } else {
-                if($stk->ResultCode == 0) {
-                    //get the payment_id as int that is for the order
+            $maxAttempts = 20;
+            $attempt = 0;
+
+            while ($attempt < $maxAttempts) {
+                // Sleep for 1 second
+                sleep(1);
+
+                $stk = StkPush::where('Token', $token)->orderBy('id', 'desc')->first();
+
+                if ($stk == null) {
+                    $attempt++;
+                } elseif ($stk->ResultCode == 0) {
+                    // Payment received, update records and redirect
                     $payment_id = DB::table('payments')->where('order_id', $order->id)->pluck('id')->toArray();
-                    //convert the payment_id to int from array
                     $payment_id = intval($payment_id[0]);
 
-                    //update the payment with the checkout request id
                     $payment = DB::table('payments')->where('id', $payment_id)->update([
                         'charge_id' => $stk->MpesaReceiptNumber,
                         'status' => 'completed',
                         'payment_type' => 'confirm',
                         'updated_at' => Carbon::now(),
                     ]);
-                    //update the order status
+
                     $order = DB::table('ec_orders')->where('id', $order->id)->update([
                         'status' => 'completed',
                         'payment_id' => $payment_id,
                         'updated_at' => Carbon::now(),
                     ]);
 
-
                     return redirect()->to(route('public.checkout.success', OrderHelper::getOrderSessionToken()));
                 } else {
+                    // STK response indicates an error
                     return redirect()->back()->withErrors($stk->ResultDesc);
                 }
             }
+
+            // If we reach here, it means 20 seconds have passed and the STK record is still null
+            return redirect()->back()->withErrors('Payment not received within the expected time.');
         }
+
 
 
 
@@ -849,11 +857,11 @@ class PublicCheckoutController
         $BusinessShortCode = get_payment_setting('business_shortcode', "M-pesa"); //api
         $Passkey = get_payment_setting('online_pass_key', "M-pesa");
         //generate the access token
-        $credentials = base64_encode($consumerKey.':'.$consumerSecret);
+        $credentials = base64_encode($consumerKey . ':' . $consumerSecret);
         $url = 'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials';
         $curl = curl_init();
         curl_setopt($curl, CURLOPT_URL, $url);
-        curl_setopt($curl, CURLOPT_HTTPHEADER, array('Authorization: Basic '.$credentials)); //setting a custom header
+        curl_setopt($curl, CURLOPT_HTTPHEADER, array('Authorization: Basic ' . $credentials)); //setting a custom header
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
         $curl_response = curl_exec($curl);
 
@@ -862,19 +870,19 @@ class PublicCheckoutController
         //initiate the transaction
         $curl = curl_init();
         curl_setopt($curl, CURLOPT_URL, 'https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest');
-        curl_setopt($curl, CURLOPT_HTTPHEADER, array('Content-Type:application/json','Authorization:Bearer '.$AccessToken->access_token)); //setting custom header
+        curl_setopt($curl, CURLOPT_HTTPHEADER, array('Content-Type:application/json','Authorization:Bearer ' . $AccessToken->access_token)); //setting custom header
         $tokenString = $token;
         $curl_post_data = array(
           //Fill in the request parameters with valid values
           'BusinessShortCode' => $BusinessShortCode,
-          'Password' => base64_encode($BusinessShortCode.$Passkey.date("YmdHis")),
+          'Password' => base64_encode($BusinessShortCode . $Passkey . date("YmdHis")),
           'Timestamp' => date("YmdHis"),
           'TransactionType' => 'CustomerPayBillOnline',
           'Amount' => $Amount,
           'PartyA' => $mpesaNumber ? $mpesaNumber : $customerPhone, // replace this with your phone number
           'PartyB' => $BusinessShortCode,
           'PhoneNumber' => $mpesaNumber ? $mpesaNumber : $customerPhone, // replace this with your phone number
-          'CallBackURL' => 'https://app.askaritechnologies.com/api/shop/callback?token='.$tokenString,
+          'CallBackURL' => 'https://app.askaritechnologies.com/api/shop/callback?token=' . $tokenString,
           'AccountReference' => $customerName,
           'TransactionDesc' => 'Testing stk push on sandbox'
         );
